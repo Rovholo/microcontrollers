@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Garage Door</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            html {
+                font-family: Helvetica;
+                display: inline-block;
+                margin: 0px auto;
+                text-align: center;
+            }
+            body {
+                background-color: #1A2238;
+            }
+            p {
+                font-size: 1.5rem;
+            }
+            .button {
+                display: block;
+                background-color: #FF6A3D;
+                border: none;
+                color: white;
+                width: 60vw;
+                height: 60vw;
+                border-radius: 40vw;
+                left: 20vw;
+                background-color: #FF6A3D;
+                border: none;
+                top: calc(40vh - 30vw);
+                font-size: 8vw;
+                cursor: pointer;
+                position: absolute;
+            }
+            .button:disabled {
+                background-color: #cccccc;
+            }
+            @media screen and (orientation: landscape) {
+                .button {
+                    width: 60vh;
+                    height: 60vh;
+                    border-radius: 40vh;
+                    left: calc(50vw - 30vh);
+                    top: 10vh;
+                    font-size: 8vh;
+                }
+            }
+        </style>
+        <script>
+            function controlRelay(command) {
+                controlButton = document.getElementById('controlbutton');
+                if (controlButton.disabled)
+                    return;
+
+                controlButton.disabled = true;
+                fetch('/?' + command);
+                setTimeout(function (controlButton) {
+                    controlButton.disabled = false;
+                }, 1000, controlButton)
+            }
+        </script>
+    </head>
+    <body>
+        <button id="controlbutton" onclick="controlRelay('action=operate_0');" class="button">START/STOP</button>
+    </body>
+</html>
