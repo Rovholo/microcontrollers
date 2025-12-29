@@ -5,6 +5,7 @@ import mqtt_0 as mqtt
 import gc
 import persistance as ps
 from utime import sleep_ms, ticks_ms, ticks_diff
+import uasyncio as asyncio
 
 gc.collect()
 

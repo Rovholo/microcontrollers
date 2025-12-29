@@ -1,4 +1,5 @@
 import json
+import ubinascii
 
 WIFI_SSID = 'wifiSsid'
 WIFI_PASSWORD = 'wifiPassword'
@@ -50,5 +51,15 @@ def persist(key, value):
     response = get_json()
     response.update({key: value})
     write(json.dumps(response))
+
+def getToken(initial=False):
+    try:
+        name = get(HOME_ID)
+        if not initial:
+            name+='/'+get(ID)
+        return ubinascii.b2a_base64(f'{name}/user:keylock'.encode()).decode().strip()
+    except Exception as e:
+        print('Error:',e)
+        return ''
 
 init()

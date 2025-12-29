@@ -55,7 +55,7 @@ class Mqtt:
         source = source.decode()
         msg = msg.decode()
         if self.PING_TOPIC not in source:
-            self.send_msg(self.callBack(source,json.loads(msg)))
+            self.send_msg(self.callBack(json.loads(msg),ps.getToken()))
     
     def get_request(self):
         try:

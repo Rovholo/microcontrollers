@@ -6,10 +6,14 @@ class Main:
     INDEX='index'
     ABOUT='about'
     
+    blink_timer=ticks_ms()
     ping_timer=ticks_ms()
+    status_timer=ticks_ms()
     offline_timer=ticks_ms()
-    ping_interval=2*60*1000 #min*s*ms
     offline_interval=4*60*60*1000 #min*s*ms
+    ping_interval=2*60*1000
+    blink_interval=10*1000
+    status_interval=5*1000
     
     def __init__(self):
         self.mqtt=Mqtt()
@@ -26,9 +30,11 @@ class Main:
             json = {self.STATUS:'open', self.INDEX:num}
         return json
 
-    def handleRequest(self,source,msg):
+    def handleRequest(self,msg,token):
         try:
-            print('got resquest:',source,msg)
+            print('got:',msg)
+            if token != ps.getToken():
+                raise Exception('auth failed')
             if msg[self.ACTION] == self.STATUS:
                 msg.update(self.door_status(int(msg[self.INDEX])))
             elif msg[self.ACTION] == self.OPERATE:
@@ -44,14 +50,26 @@ class Main:
         return msg
     
     def handle_recovery(self):
-        if ticks_diff(ticks_ms(), self.ping_timer) >= self.ping_interval:
+        if ticks_diff(ticks_ms(),self.blink_timer) >= self.blink_interval:
+            control.led_blink(500,500)
+            self.blink_timer=ticks_ms()
+        if ticks_diff(ticks_ms(),self.ping_timer) >= self.ping_interval:
             self.mqtt.ping()
-            self.ping_timer = ticks_ms()
-        if ticks_diff(ticks_ms(), self.offline_timer) >= self.offline_interval*2:
+            self.ping_timer=ticks_ms()
+        if ticks_diff(ticks_ms(),self.offline_timer) >= self.offline_interval:
             self.offline_timer = ticks_ms()
-        if not http.is_connected():
-            if ticks_diff(ticks_ms(), self.offline_timer) >= self.offline_interval:
+            if not http.is_connected():
                 control.reset()
+    
+    def handle_status(self,prev_statuses):
+        if ticks_diff(ticks_ms(),self.status_timer) >= self.status_interval:
+            self.status_timer = ticks_ms()
+            for i in range(len(prev_statuses)):
+                status = self.door_status(i)
+                if prev_statuses[i][self.STATUS] != status[self.STATUS]:
+                    status.update({'old':prev_statuses[i][self.STATUS],ps.NAME:ps.get(ps.NAME)})
+                    self.mqtt.send_msg(status)
+                    prev_statuses[i] = status
 
     def start(self):
         http.init()
@@ -59,19 +77,13 @@ class Main:
         http.set_callBack(self.handleRequest)
         self.mqtt.set_callBack(self.handleRequest)
         self.mqtt.subscribe()
-        prev_statuses=[self.door_status(x) for x in control.get_list()]
+        prev_statuses=[self.door_status(i) for i in range(control.getSize())]
         [self.mqtt.send_msg(x) for x in prev_statuses]
         while True:
             self.mqtt.get_request()
             http.get_request()
             self.handle_recovery()
-            for num in control.get_list():
-                status = self.door_status(num)
-                if prev_statuses[num] != status:
-                    http.send_notification(ps.get(ps.HOME_ID),ps.get(ps.NAME),status[self.STATUS])
-                    self.mqtt.send_msg(status)
-                    prev_statuses[num] = status
-            control.led_blink(1,500,4000)
-
+            self.handle_status(prev_statuses)
+            
 
 Main().start()

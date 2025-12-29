@@ -10,9 +10,10 @@ gc.collect()
 
 hotspot = network.WLAN(network.AP_IF)
 wifi = network.WLAN(network.STA_IF)
+hotspot.active(False)
 
-def handle_credential(source, msg):
-    print('got:', source, msg)
+def handle_credential(msg,token):
+    print('got:', msg)
     ssid = msg[ps.WIFI_SSID];
     password = msg[ps.WIFI_PASSWORD]
     if connect_wifi(ssid, password):
@@ -32,10 +33,9 @@ def handle_credential(source, msg):
 def create_hotspot(ssid, password):
     hotspot.active(True)
     hotspot.config(ssid=ssid, password=password)
-    #hotspot.active(True)
     print('hotspot', hotspot.ifconfig())
 
-def connect_wifi(ssid, password):
+def connect_wifi(ssid,password):
     connection_timeout=10*1000#s*ms
     connection_start=ticks_ms()
     wifi.active(True)
@@ -46,7 +46,6 @@ def connect_wifi(ssid, password):
             return False
     print('Connection successful')
     print(wifi.ifconfig())
-    control.led_blink(3, 200, 100)
     return True
 
 def boot():
@@ -60,8 +59,6 @@ def boot():
         http.set_callBack(handle_credential)
         while not ps.get(ps.ACTIVE):
             http.get_request()
-            control.led_blink(1, 100, 100)
-        control.led_blink(3, 1000, 100)
         hotspot.active(False)
         control.reset()
 
