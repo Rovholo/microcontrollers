@@ -63,7 +63,7 @@ class Main:
     
     def handle_status(self,prev_statuses):
         if ticks_diff(ticks_ms(),self.status_timer) >= self.status_interval:
-            self.status_timer = ticks_ms()
+            self.status_timer=ticks_ms()
             for i in range(len(prev_statuses)):
                 status = self.door_status(i)
                 if prev_statuses[i][self.STATUS] != status[self.STATUS]:
