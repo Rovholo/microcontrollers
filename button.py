@@ -1,30 +1,34 @@
-import RPi.GPIO as GPIO # Import Raspberry Pi GPIO library
+import socket
 import time
+from zeroconf import ServiceInfo, ServiceBrowser, Zeroconf
 
-gpio = 16
+class ServiceListener:
+    def remove_service(self, zeroconf, type, name):
+        print(f"Service {name} removed")
 
-GPIO.setwarnings(False) # Ignore warning for now
-GPIO.setmode(GPIO.BCM) # Use physical pin numbering
-GPIO.setup(gpio, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    def add_service(self, zeroconf, type, name):
+        info = zeroconf.get_service_info(type, name)
+        if info:
+            # info.parsed_addresses contains the resolved IP addresses
+            print(f"Service {name} added, address: {', '.join(info.parsed_addresses)}")
+            print(f"  Port: {info.port}")
+            # You can stop the script or store the address for later use here
 
-button_state = GPIO.input(gpio)
-prev_button_state = button_state;
+# Example of how to use it
+if __name__ == '__main__':
+    # 'Zeroconf' instance manages mDNS operations in the background
+    zeroconf = Zeroconf()
+    listener = ServiceListener()
+    
+    # Browse for services of a specific type (e.g., http, ssh, etc.)
+    # The standard way to resolve a host name is to look for a service it offers
+    print("\nBrowsing for _http._tcp.local. services...")
+    browser = ServiceBrowser(zeroconf, "_http._tcp.local.", listener)
+    
+    try:
+        # Keep the script running to listen for mDNS responses
+        input("Press enter to exit...\n")
+    finally:
+        # Clean up resources
+        zeroconf.close()
 
-while True: # Run forever
-    button_state = GPIO.input(gpio)
-
-    # Check if the button state has changed (press or release event)
-    if button_state != prev_button_state:
-        if button_state == GPIO.LOW:  # Button is pressed
-            print("The button is pressed!")
-        else:  # Button is released
-            print("The button is released!")
-
-        # Update the previous button state
-        prev_button_state = button_state
-
-    # Small delay to avoid unnecessary reading
-    time.sleep(0.1)
-
-    # if GPIO.input(gpio) == GPIO.HIGH:
-        # print("Button was pushed!")

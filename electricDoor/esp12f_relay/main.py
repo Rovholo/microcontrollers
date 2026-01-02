@@ -12,7 +12,6 @@ class Main:
     offline_timer=ticks_ms()
     offline_interval=4*60*60*1000 #min*s*ms
     ping_interval=2*60*1000
-    blink_interval=10*1000
     status_interval=5*1000
     
     def __init__(self):
@@ -50,7 +49,7 @@ class Main:
         return msg
     
     def handle_recovery(self):
-        if ticks_diff(ticks_ms(),self.blink_timer) >= self.blink_interval:
+        if ticks_diff(ticks_ms(),self.blink_timer) >= self.status_interval:
             control.led_blink(500,500)
             self.blink_timer=ticks_ms()
         if ticks_diff(ticks_ms(),self.ping_timer) >= self.ping_interval:
