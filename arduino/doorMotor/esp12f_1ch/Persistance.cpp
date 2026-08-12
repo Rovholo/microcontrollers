@@ -63,5 +63,6 @@ void Persistance::persist(const String& key, const String& value) {
 }
 
 String Persistance::getToken() {
+  Serial.print(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
   return base64::encode(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
 }

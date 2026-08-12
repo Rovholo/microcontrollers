@@ -97,6 +97,7 @@ void setup() {
   Serial.println();
   Persistance::init();
   Control::init();
+  // Persistance::clearJson();
 
   if (Persistance::get(Persistance::ACTIVE).toInt() == 0) {
     Lan::createHotspot("homeQ","abcd1234");

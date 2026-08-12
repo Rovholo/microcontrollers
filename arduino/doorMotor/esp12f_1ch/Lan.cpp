@@ -19,6 +19,7 @@ bool Lan::connectWifi(const String& ssid, const String& password) {
 
 void Lan::createHotspot(const String& ssid, const String& password) {
   WiFi.softAP(ssid, password);
+  Serial.println("Hotspot created");
 }
 
 void Lan::disconnectHotspot() {
