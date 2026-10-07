@@ -17,12 +17,16 @@ private:
   inline static String action;
   inline static String reaction;
   inline static String pingTopic;
+  inline static String willTopic;
+  // The first connection after boot sends the "start" reactions, and reconnects publish online on the will topic.
+  inline static bool connectedBefore = false;
   static void handleConnection();
   static bool connect(const String& id, const String& username, const String& password);
   static bool isConnected();
 public:
   typedef DynamicJsonDocument (*CallbackFunction)(DynamicJsonDocument doc);
-  static void init(CallbackFunction function);
+  typedef void (*ConnectFunction)();
+  static void init(CallbackFunction function, ConnectFunction onFirstConnect);
   static void poll();
   static void subscribe(const String& topic);
   static void send(DynamicJsonDocument doc);

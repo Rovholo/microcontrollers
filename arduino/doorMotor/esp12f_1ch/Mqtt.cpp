@@ -1,6 +1,7 @@
 #include "Mqtt.h"
 
 Mqtt::CallbackFunction mqttCallback;
+Mqtt::ConnectFunction firstConnectCallback;
 WiFiClientSecure secureClient;
 PubSubClient client(secureClient);
 
@@ -20,6 +21,12 @@ void Mqtt::handleConnection() {
     if (connect(deviceId, username, password)) {
       Serial.println("MQTT connected");
       subscribe(home + "/" + action + "/" + deviceId);
+      if (connectedBefore) {
+        send(willTopic, "{\"status\":\"online\"}");
+      } else {
+        connectedBefore = true;
+        firstConnectCallback();
+      }
     } else {
       Serial.println("MQTT connection failed, rc=" + String(client.state()));
       delay(5000);
@@ -27,7 +34,7 @@ void Mqtt::handleConnection() {
   }
 }
 
-void Mqtt::init(CallbackFunction function) {
+void Mqtt::init(CallbackFunction function, ConnectFunction onFirstConnect) {
   broker = Persistance::get(Persistance::MQTT_BROKER);
   username = Persistance::get(Persistance::MQTT_USER);
   password = Persistance::get(Persistance::MQTT_PASSWORD);
@@ -35,17 +42,23 @@ void Mqtt::init(CallbackFunction function) {
   home = "home/" + Persistance::get(Persistance::HOME_ID);
   action = "action";
   reaction = "reaction";
+  willTopic = home + "/will/" + deviceId;
 
   secureClient.setInsecure();
   client.setServer(broker.c_str(), 8883);
   mqttCallback = function;
+  firstConnectCallback = onFirstConnect;
   client.setCallback(handleRequest);
   handleConnection();
 }
 
 bool Mqtt::connect(const String& id, const String& username, const String& password) {
   Serial.println("Connecting MQTT");
-  return client.connect(id.c_str(), username.c_str(), password.c_str());
+  DynamicJsonDocument doc(1024);
+  doc["status"] =  "offline";
+  String willMessage;
+  serializeJson(doc, willMessage);
+  return client.connect(id.c_str(), username.c_str(), password.c_str(), willTopic.c_str(), 1, false, willMessage.c_str());
 }
 
 bool Mqtt::isConnected() {

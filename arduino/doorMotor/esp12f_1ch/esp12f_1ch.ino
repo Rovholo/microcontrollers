@@ -7,6 +7,7 @@
 
 const String action= "action";
 const String status = "status";
+const String mode = "mode";
 const String operate = "operate";
 const String idx = "index";
 const String about = "about";
@@ -18,9 +19,8 @@ unsigned long statusTimer = millis();
 String* prevStatuses;
 
 DynamicJsonDocument handleCredential(DynamicJsonDocument doc) {
-  Serial.print("handleCredential: ");
+  Serial.println("handleCredential: ");
   serializeJson(doc, Serial);
-  Serial.println("");
   if (Lan::connectWifi(doc[Persistance::WIFI_SSID], doc[Persistance::WIFI_PASSWORD])) {
     Persistance::persist(Persistance::WIFI_SSID, doc[Persistance::WIFI_SSID]);
     Persistance::persist(Persistance::WIFI_PASSWORD, doc[Persistance::WIFI_PASSWORD]);
@@ -67,6 +67,7 @@ DynamicJsonDocument handleRequest(DynamicJsonDocument doc) {
   for (JsonPair kv : resp.as<JsonObject>()) {
     doc[kv.key()] = kv.value();
   }
+
   return doc;
 }
 
@@ -77,8 +78,7 @@ void handleRecovery() {
     for (uint8_t i = 0; i < Control::relayCount(); i++) {
       DynamicJsonDocument resp = getStatus(i);
       if (prevStatuses[i] != resp[status]) {
-        resp[Persistance::NAME] = Persistance::get(Persistance::NAME);
-        resp["old"] = prevStatuses[i];
+        resp["prevStatus"] = prevStatuses[i];
         prevStatuses[i] = resp[status].as<String>();
         Mqtt::send(resp);
       }
@@ -89,6 +89,16 @@ void handleRecovery() {
     if (!Http::isConnected()) {
       Control::restart();
     }
+  }
+}
+
+// Called on the first mqtt connection after boot, so the start reactions aren't lost if mqtt isn't connected yet.
+void sendStart() {
+  for (uint8_t i = 0; i < Control::relayCount(); i++) {
+    DynamicJsonDocument doc = getStatus(i);
+    prevStatuses[i] = doc[status].as<String>();
+    doc[mode] = "start";
+    Mqtt::send(doc);
   }
 }
 
@@ -111,15 +121,13 @@ void setup() {
 
   Lan::connectWifi(Persistance::get(Persistance::WIFI_SSID), Persistance::get(Persistance::WIFI_PASSWORD));
   Http::init(handleRequest);
-  Mqtt::init(handleRequest);
 
+  // Set before Mqtt::init, which may connect straight away and call sendStart.
   prevStatuses = new String[Control::relayCount()];
   for (uint8_t i = 0; i < Control::relayCount(); i++) {
-    DynamicJsonDocument doc = getStatus(i);
-    prevStatuses[i] = doc[status].as<String>();
-    Mqtt::send(doc);
+    prevStatuses[i] = getStatus(i)[status].as<String>();
   }
-  
+  Mqtt::init(handleRequest, sendStart);
 }
 
 void loop() {
