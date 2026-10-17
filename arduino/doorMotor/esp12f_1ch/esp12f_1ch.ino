@@ -12,11 +12,14 @@ const String operate = "operate";
 const String idx = "index";
 const String about = "about";
 const long offlineTime = 4 * 60 * 60 * 1000; // h * min * s * ms
-const long statusTime = 5 * 1000;
+const long blinkTime = 5 * 1000;
+const long stableTime = 3 * 1000;
 
 unsigned long offlineTimer = millis();
-unsigned long statusTimer = millis();
+unsigned long blinkTimer = millis();
 String* prevStatuses;
+String* readings;
+unsigned long* readingTimers;
 
 DynamicJsonDocument handleCredential(DynamicJsonDocument doc) {
   Serial.println("handleCredential: ");
@@ -43,10 +46,14 @@ DynamicJsonDocument startDoor(const uint8_t& i) {
   return getStatus(i);
 }
 
+String readStatus(const uint8_t& i) {
+  return Control::isClosed(i) ? "closed" : "open";
+}
+
 DynamicJsonDocument getStatus(const uint8_t& i) {
   DynamicJsonDocument doc(1024);
   doc[idx] = i;
-  doc[status] = Control::isClosed(i) ? "closed" : "open";
+  doc[status] = readStatus(i);
   return doc;
 }
 
@@ -71,18 +78,28 @@ DynamicJsonDocument handleRequest(DynamicJsonDocument doc) {
   return doc;
 }
 
-void handleRecovery() {
-  if (millis() - statusTimer >= statusTime) {
-    statusTimer = millis();
-    Control::ledBlink();
-    for (uint8_t i = 0; i < Control::relayCount(); i++) {
-      DynamicJsonDocument resp = getStatus(i);
-      if (prevStatuses[i] != resp[status]) {
-        resp["prevStatus"] = prevStatuses[i];
-        prevStatuses[i] = resp[status].as<String>();
-        Mqtt::send(resp);
+void handleStatusChanges() {
+  for (uint8_t i = 0; i < Control::relayCount(); i++) {
+    String reading = readStatus(i);
+    if (reading != readings[i]) {
+      readings[i] = reading;
+      readingTimers[i] = millis();
+    } else if (reading != prevStatuses[i] && millis() - readingTimers[i] >= stableTime) {
+      DynamicJsonDocument doc(1024);
+      doc[idx] = i;
+      doc[status] = reading;
+      doc["prevStatus"] = prevStatuses[i];
+      if (Mqtt::sendState(doc)) {
+        prevStatuses[i] = reading;
       }
     }
+  }
+}
+
+void handleRecovery() {
+  if (millis() - blinkTimer >= blinkTime) {
+    blinkTimer = millis();
+    Control::ledBlink();
   }
   if (millis() - offlineTimer >= offlineTime) {
     offlineTimer = millis();
@@ -92,13 +109,12 @@ void handleRecovery() {
   }
 }
 
-// Called on the first mqtt connection after boot, so the start reactions aren't lost if mqtt isn't connected yet.
-void sendStart() {
+void onMqttConnect(bool firstConnect) {
   for (uint8_t i = 0; i < Control::relayCount(); i++) {
     DynamicJsonDocument doc = getStatus(i);
-    prevStatuses[i] = doc[status].as<String>();
-    doc[mode] = "start";
-    Mqtt::send(doc);
+    if (firstConnect) prevStatuses[i] = doc[status].as<String>();
+    doc[mode] = "connect";
+    Mqtt::sendState(doc);
   }
 }
 
@@ -122,16 +138,21 @@ void setup() {
   Lan::connectWifi(Persistance::get(Persistance::WIFI_SSID), Persistance::get(Persistance::WIFI_PASSWORD));
   Http::init(handleRequest);
 
-  // Set before Mqtt::init, which may connect straight away and call sendStart.
+  // Set before Mqtt::init, which may connect straight away and call onMqttConnect.
   prevStatuses = new String[Control::relayCount()];
+  readings = new String[Control::relayCount()];
+  readingTimers = new unsigned long[Control::relayCount()];
   for (uint8_t i = 0; i < Control::relayCount(); i++) {
-    prevStatuses[i] = getStatus(i)[status].as<String>();
+    prevStatuses[i] = readStatus(i);
+    readings[i] = prevStatuses[i];
+    readingTimers[i] = millis();
   }
-  Mqtt::init(handleRequest, sendStart);
+  Mqtt::init(handleRequest, onMqttConnect);
 }
 
 void loop() {
   Http::poll();
   Mqtt::poll();
+  handleStatusChanges();
   handleRecovery();
 }

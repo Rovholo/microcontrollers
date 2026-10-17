@@ -1,7 +1,7 @@
 #include "Mqtt.h"
 
 Mqtt::CallbackFunction mqttCallback;
-Mqtt::ConnectFunction firstConnectCallback;
+Mqtt::ConnectFunction connectCallback;
 WiFiClientSecure secureClient;
 PubSubClient client(secureClient);
 
@@ -21,12 +21,8 @@ void Mqtt::handleConnection() {
     if (connect(deviceId, username, password)) {
       Serial.println("MQTT connected");
       subscribe(home + "/" + action + "/" + deviceId);
-      if (connectedBefore) {
-        send(willTopic, "{\"status\":\"online\"}");
-      } else {
-        connectedBefore = true;
-        firstConnectCallback();
-      }
+      connectCallback(!connectedBefore);
+      connectedBefore = true;
     } else {
       Serial.println("MQTT connection failed, rc=" + String(client.state()));
       delay(5000);
@@ -34,7 +30,7 @@ void Mqtt::handleConnection() {
   }
 }
 
-void Mqtt::init(CallbackFunction function, ConnectFunction onFirstConnect) {
+void Mqtt::init(CallbackFunction function, ConnectFunction onConnect) {
   broker = Persistance::get(Persistance::MQTT_BROKER);
   username = Persistance::get(Persistance::MQTT_USER);
   password = Persistance::get(Persistance::MQTT_PASSWORD);
@@ -42,12 +38,12 @@ void Mqtt::init(CallbackFunction function, ConnectFunction onFirstConnect) {
   home = "home/" + Persistance::get(Persistance::HOME_ID);
   action = "action";
   reaction = "reaction";
-  willTopic = home + "/will/" + deviceId;
+  stateTopic = home + "/state/" + deviceId;
 
   secureClient.setInsecure();
   client.setServer(broker.c_str(), 8883);
   mqttCallback = function;
-  firstConnectCallback = onFirstConnect;
+  connectCallback = onConnect;
   client.setCallback(handleRequest);
   handleConnection();
 }
@@ -58,7 +54,7 @@ bool Mqtt::connect(const String& id, const String& username, const String& passw
   doc["status"] =  "offline";
   String willMessage;
   serializeJson(doc, willMessage);
-  return client.connect(id.c_str(), username.c_str(), password.c_str(), willTopic.c_str(), 1, false, willMessage.c_str());
+  return client.connect(id.c_str(), username.c_str(), password.c_str(), stateTopic.c_str(), 1, true, willMessage.c_str());
 }
 
 bool Mqtt::isConnected() {
@@ -82,13 +78,20 @@ void Mqtt::send(DynamicJsonDocument doc) {
   send(resp);
 }
 
+bool Mqtt::sendState(DynamicJsonDocument doc) {
+  String state;
+  serializeJson(doc, state);
+  return send(stateTopic, state, true);
+}
+
 void Mqtt::send(const String& payload) {
   send(home + "/" + reaction + "/" + deviceId, payload);
 }
 
-void Mqtt::send(const String& topic, const String& payload) {
+bool Mqtt::send(const String& topic, const String& payload, bool retained) {
   if(isConnected()) {
     Serial.println("sending " + payload);
-    client.publish(topic.c_str(), payload.c_str());
+    return client.publish(topic.c_str(), payload.c_str(), retained);
   }
+  return false;
 }
