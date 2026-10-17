@@ -17,7 +17,7 @@ void handleRequest(char* topic, byte* payload, unsigned int length) {
 }
 
 void Mqtt::handleConnection() {
-  if (Http::isConnected() && !isConnected()) {
+  if (!isConnected() && Http::isConnected()) {
     if (connect(deviceId, username, password)) {
       Serial.println("MQTT connected");
       subscribe(home + "/" + action + "/" + deviceId);
@@ -41,6 +41,8 @@ void Mqtt::init(CallbackFunction function, ConnectFunction onConnect) {
   stateTopic = home + "/state/" + deviceId;
 
   secureClient.setInsecure();
+  // Sends each small mqtt packet straight away instead of waiting to batch it with the next one.
+  WiFiClient::setDefaultNoDelay(true);
   client.setServer(broker.c_str(), 8883);
   mqttCallback = function;
   connectCallback = onConnect;
