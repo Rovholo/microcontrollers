@@ -20,8 +20,15 @@ unsigned long blinkTimer = millis();
 String* prevStatuses;
 String* readings;
 unsigned long* readingTimers;
+const uint8_t recentIdCount = 8;
+const unsigned long repeatTime = 10 * 1000;
+String recentIds[recentIdCount];
+unsigned long recentIdTimers[recentIdCount];
+uint8_t recentIdIndex = 0;
 
 DynamicJsonDocument handleCredential(DynamicJsonDocument doc) {
+  String secret = doc[Persistance::SECRET] | "";
+  doc.remove(Persistance::SECRET);
   Serial.println("handleCredential: ");
   serializeJson(doc, Serial);
   if (Lan::connectWifi(doc[Persistance::WIFI_SSID], doc[Persistance::WIFI_PASSWORD])) {
@@ -33,6 +40,7 @@ DynamicJsonDocument handleCredential(DynamicJsonDocument doc) {
     Persistance::persist(Persistance::MQTT_BROKER, doc[Persistance::MQTT_BROKER]);
     Persistance::persist(Persistance::MQTT_USER, doc[Persistance::MQTT_USER]);
     Persistance::persist(Persistance::MQTT_PASSWORD, doc[Persistance::MQTT_PASSWORD]);
+    Persistance::persist(Persistance::SECRET, secret);
     Persistance::persist(Persistance::ACTIVE, String(true));
     doc["success"] = true;
   } else {
@@ -57,6 +65,17 @@ DynamicJsonDocument getStatus(const uint8_t& i) {
   return doc;
 }
 
+bool isRepeat(const String& id) {
+  if (id.isEmpty()) return false;
+  for (uint8_t i = 0; i < recentIdCount; i++) {
+    if (recentIds[i] == id && millis() - recentIdTimers[i] < repeatTime) return true;
+  }
+  recentIds[recentIdIndex] = id;
+  recentIdTimers[recentIdIndex] = millis();
+  recentIdIndex = (recentIdIndex + 1) % recentIdCount;
+  return false;
+}
+
 DynamicJsonDocument handleRequest(DynamicJsonDocument doc) {
   Serial.print("handleRequest: ");
   serializeJson(doc, Serial);
@@ -66,7 +85,8 @@ DynamicJsonDocument handleRequest(DynamicJsonDocument doc) {
   if (doc[action] == status) {
     resp = getStatus(doc[idx].as<uint8_t>());
   } else if (doc[action] == operate) {
-    resp = startDoor(doc[idx].as<uint8_t>());
+    String id = doc["id"] | "";
+    resp = isRepeat(id) ? getStatus(doc[idx].as<uint8_t>()) : startDoor(doc[idx].as<uint8_t>());
   } else {
     resp["success"] = false;
   }
@@ -127,7 +147,7 @@ void setup() {
 
   if (Persistance::get(Persistance::ACTIVE).toInt() == 0) {
     Lan::createHotspot("homeQ","abcd1234");
-    Http::init(handleCredential);
+    Http::init(handleCredential, false);
     while (Persistance::get(Persistance::ACTIVE).toInt() == 0) {
       Http::poll();
     }
@@ -136,7 +156,7 @@ void setup() {
   }
 
   Lan::connectWifi(Persistance::get(Persistance::WIFI_SSID), Persistance::get(Persistance::WIFI_PASSWORD));
-  Http::init(handleRequest);
+  Http::init(handleRequest, true);
 
   // Set before Mqtt::init, which may connect straight away and call onMqttConnect.
   prevStatuses = new String[Control::relayCount()];

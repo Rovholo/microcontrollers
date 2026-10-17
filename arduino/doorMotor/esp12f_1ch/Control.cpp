@@ -3,6 +3,8 @@
 const uint8_t LED_PIN = 5;
 const uint8_t relayPins[1] = {14};
 const uint8_t reedSwitchesPins[1] = {4};
+const uint32_t pulseTime = 500;
+Ticker relayTickers[sizeof(relayPins) / sizeof(relayPins[0])];
 
 void Control::init() {
     pinMode(LED_PIN, OUTPUT);
@@ -33,10 +35,11 @@ void Control::relayOn(const uint8_t& i) {
 void Control::relayOff(const uint8_t& i) {
     digitalWrite(relayPins[i], LOW);
 }
-void Control::relayPulse(const uint8_t& i) {
+bool Control::relayPulse(const uint8_t& i) {
+    if (relayTickers[i].active()) return false;
     relayOn(i);
-    delay(500);
-    relayOff(i);
+    relayTickers[i].once_ms(pulseTime, [i]() { relayOff(i); });
+    return true;
 }
 
 uint8_t Control::relayCount() {

@@ -22,6 +22,7 @@ public:
   inline static const String MQTT_BROKER = "mqttBrokerId";
   inline static const String MQTT_USER = "mqttUser";
   inline static const String MQTT_PASSWORD = "mqttPassword";
+  inline static const String SECRET = "secret";
   static String read(const String& name);
   static void write(const String& name, const String& text);
   static void init();

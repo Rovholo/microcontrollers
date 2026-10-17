@@ -19,6 +19,10 @@ private:
   inline static String pingTopic;
   inline static String stateTopic;
   inline static bool connectedBefore = false;
+  inline static const unsigned long minRetryDelay = 5 * 1000;
+  inline static const unsigned long maxRetryDelay = 60 * 1000;
+  inline static unsigned long retryTimer = 0;
+  inline static unsigned long retryDelay = 0;
   static void handleConnection();
   static bool connect(const String& id, const String& username, const String& password);
   static bool isConnected();

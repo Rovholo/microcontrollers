@@ -3,6 +3,7 @@
 Mqtt::CallbackFunction mqttCallback;
 Mqtt::ConnectFunction connectCallback;
 WiFiClientSecure secureClient;
+BearSSL::Session tlsSession;
 PubSubClient client(secureClient);
 
 void handleRequest(char* topic, byte* payload, unsigned int length) {
@@ -17,16 +18,18 @@ void handleRequest(char* topic, byte* payload, unsigned int length) {
 }
 
 void Mqtt::handleConnection() {
-  if (!isConnected() && Http::isConnected()) {
-    if (connect(deviceId, username, password)) {
-      Serial.println("MQTT connected");
-      subscribe(home + "/" + action + "/" + deviceId);
-      connectCallback(!connectedBefore);
-      connectedBefore = true;
-    } else {
-      Serial.println("MQTT connection failed, rc=" + String(client.state()));
-      delay(5000);
-    }
+  if (isConnected()) return;
+  if (retryDelay > 0 && millis() - retryTimer < retryDelay) return;
+  retryTimer = millis();
+  if (Http::isConnected() && connect(deviceId, username, password)) {
+    Serial.println("MQTT connected");
+    retryDelay = 0;
+    subscribe(home + "/" + action + "/" + deviceId);
+    connectCallback(!connectedBefore);
+    connectedBefore = true;
+  } else {
+    retryDelay = retryDelay == 0 ? minRetryDelay : min(retryDelay * 2, maxRetryDelay);
+    Serial.println("MQTT connection failed, rc=" + String(client.state()) + ", retrying in " + String(retryDelay / 1000) + "s");
   }
 }
 
@@ -41,9 +44,11 @@ void Mqtt::init(CallbackFunction function, ConnectFunction onConnect) {
   stateTopic = home + "/state/" + deviceId;
 
   secureClient.setInsecure();
+  secureClient.setSession(&tlsSession);
   // Sends each small mqtt packet straight away instead of waiting to batch it with the next one.
   WiFiClient::setDefaultNoDelay(true);
   client.setServer(broker.c_str(), 8883);
+  client.setSocketTimeout(5);
   mqttCallback = function;
   connectCallback = onConnect;
   client.setCallback(handleRequest);
@@ -71,7 +76,7 @@ void Mqtt::poll() {
 }
 
 void Mqtt::subscribe(const String& topic) {
-  client.subscribe(topic.c_str());
+  client.subscribe(topic.c_str(), 1);
 }
 
 void Mqtt::send(DynamicJsonDocument doc) {
