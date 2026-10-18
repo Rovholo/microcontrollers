@@ -5,9 +5,9 @@ void Persistance::init() {
     Serial.println("Failed to mount file system");
     return;
   }
-  if (read().isEmpty()) {
+  if (deserializeJson(settings, read())) {
     clearJson();
-  };
+  }
 }
 
 String Persistance::read(const String& name) {
@@ -38,31 +38,34 @@ void Persistance::write(const String& text) {
 }
 
 void Persistance::clearJson() {
+  settings.clear();
+  token = "";
   write("{}");
 }
 
-DynamicJsonDocument Persistance::getJson() {
-  DynamicJsonDocument doc(1024);
-  DeserializationError error = deserializeJson(doc,read());
-  if (error) {
-    doc.clear();
-  }
-  return doc;
+String Persistance::get(const String& key) {
+  return settings[key].as<String>();
 }
 
-String Persistance::get(const String& key) {
-  return getJson()[key].as<String>();
+void Persistance::set(const String& key, const String& value) {
+  settings[key] = value;
+  if (key == ID || key == HOME_ID) token = "";
+}
+
+void Persistance::save() {
+  String text;
+  serializeJsonPretty(settings, text);
+  write(text);
+  // Reparsing compacts the document, since replaced values otherwise keep their old space.
+  deserializeJson(settings, text);
 }
 
 void Persistance::persist(const String& key, const String& value) {
-  DynamicJsonDocument doc = getJson();
-  doc[key] = value;
-  String prettyOutput;
-  serializeJsonPretty(doc, prettyOutput);
-  write(prettyOutput);
+  set(key, value);
+  save();
 }
 
 String Persistance::getToken() {
-  Serial.print(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
-  return base64::encode(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
+  if (token.isEmpty()) token = base64::encode(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
+  return token;
 }

@@ -26,43 +26,36 @@ String recentIds[recentIdCount];
 unsigned long recentIdTimers[recentIdCount];
 uint8_t recentIdIndex = 0;
 
-DynamicJsonDocument handleCredential(DynamicJsonDocument doc) {
+void handleCredential(JsonDocument& doc) {
   String secret = doc[Persistance::SECRET] | "";
   doc.remove(Persistance::SECRET);
   Serial.println("handleCredential: ");
   serializeJson(doc, Serial);
   if (Lan::connectWifi(doc[Persistance::WIFI_SSID], doc[Persistance::WIFI_PASSWORD])) {
-    Persistance::persist(Persistance::WIFI_SSID, doc[Persistance::WIFI_SSID]);
-    Persistance::persist(Persistance::WIFI_PASSWORD, doc[Persistance::WIFI_PASSWORD]);
-    Persistance::persist(Persistance::NAME, doc[Persistance::NAME]);
-    Persistance::persist(Persistance::ID, doc[Persistance::ID]);
-    Persistance::persist(Persistance::HOME_ID, doc[Persistance::HOME_ID]);
-    Persistance::persist(Persistance::MQTT_BROKER, doc[Persistance::MQTT_BROKER]);
-    Persistance::persist(Persistance::MQTT_USER, doc[Persistance::MQTT_USER]);
-    Persistance::persist(Persistance::MQTT_PASSWORD, doc[Persistance::MQTT_PASSWORD]);
-    Persistance::persist(Persistance::SECRET, secret);
-    Persistance::persist(Persistance::ACTIVE, String(true));
+    Persistance::set(Persistance::WIFI_SSID, doc[Persistance::WIFI_SSID]);
+    Persistance::set(Persistance::WIFI_PASSWORD, doc[Persistance::WIFI_PASSWORD]);
+    Persistance::set(Persistance::NAME, doc[Persistance::NAME]);
+    Persistance::set(Persistance::ID, doc[Persistance::ID]);
+    Persistance::set(Persistance::HOME_ID, doc[Persistance::HOME_ID]);
+    Persistance::set(Persistance::MQTT_BROKER, doc[Persistance::MQTT_BROKER]);
+    Persistance::set(Persistance::MQTT_USER, doc[Persistance::MQTT_USER]);
+    Persistance::set(Persistance::MQTT_PASSWORD, doc[Persistance::MQTT_PASSWORD]);
+    Persistance::set(Persistance::SECRET, secret);
+    Persistance::set(Persistance::ACTIVE, String(true));
+    Persistance::save();
     doc["success"] = true;
   } else {
     doc["success"] = false;
   }
-  return doc;
-}
-
-DynamicJsonDocument startDoor(const uint8_t& i) {
-  Control::relayPulse(i);
-  return getStatus(i);
 }
 
 String readStatus(const uint8_t& i) {
   return Control::isClosed(i) ? "closed" : "open";
 }
 
-DynamicJsonDocument getStatus(const uint8_t& i) {
-  DynamicJsonDocument doc(1024);
+void writeStatus(JsonDocument& doc, const uint8_t& i) {
   doc[idx] = i;
   doc[status] = readStatus(i);
-  return doc;
 }
 
 bool isRepeat(const String& id) {
@@ -76,26 +69,24 @@ bool isRepeat(const String& id) {
   return false;
 }
 
-DynamicJsonDocument handleRequest(DynamicJsonDocument doc) {
+void handleRequest(JsonDocument& doc) {
   Serial.print("handleRequest: ");
   serializeJson(doc, Serial);
   Serial.println("");
-  DynamicJsonDocument resp(1024);
-  doc["success"] = true;
-  if (doc[action] == status) {
-    resp = getStatus(doc[idx].as<uint8_t>());
-  } else if (doc[action] == operate) {
+  uint8_t i = doc[idx].as<uint8_t>();
+  if (i >= Control::relayCount()) {
+    doc["success"] = false;
+    return;
+  }
+  if (doc[action] == operate) {
     String id = doc["id"] | "";
-    resp = isRepeat(id) ? getStatus(doc[idx].as<uint8_t>()) : startDoor(doc[idx].as<uint8_t>());
-  } else {
-    resp["success"] = false;
+    if (!isRepeat(id)) Control::relayPulse(i);
+  } else if (doc[action] != status) {
+    doc["success"] = false;
+    return;
   }
-
-  for (JsonPair kv : resp.as<JsonObject>()) {
-    doc[kv.key()] = kv.value();
-  }
-
-  return doc;
+  writeStatus(doc, i);
+  doc["success"] = true;
 }
 
 void handleStatusChanges() {
@@ -105,7 +96,7 @@ void handleStatusChanges() {
       readings[i] = reading;
       readingTimers[i] = millis();
     } else if (reading != prevStatuses[i] && millis() - readingTimers[i] >= stableTime) {
-      DynamicJsonDocument doc(1024);
+      StaticJsonDocument<256> doc;
       doc[idx] = i;
       doc[status] = reading;
       doc["prevStatus"] = prevStatuses[i];
@@ -131,7 +122,8 @@ void handleRecovery() {
 
 void onMqttConnect(bool firstConnect) {
   for (uint8_t i = 0; i < Control::relayCount(); i++) {
-    DynamicJsonDocument doc = getStatus(i);
+    StaticJsonDocument<256> doc;
+    writeStatus(doc, i);
     if (firstConnect) prevStatuses[i] = doc[status].as<String>();
     doc[mode] = "connect";
     Mqtt::sendState(doc);

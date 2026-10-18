@@ -9,7 +9,7 @@
 
 class Http {
 public:
-  typedef DynamicJsonDocument (*CallbackFunction)(DynamicJsonDocument doc);
+  typedef void (*CallbackFunction)(JsonDocument& doc);
   static void init(CallbackFunction function, bool requireSignature);
   static void poll();
   static bool isConnected();

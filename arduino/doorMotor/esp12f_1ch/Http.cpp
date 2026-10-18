@@ -77,13 +77,18 @@ bool isAuthorized(const String& body) {
   return auth.startsWith("Basic ") && auth.substring(6) == Persistance::getToken();
 }
 
-void handleNonce() {
+String newNonce() {
   uint8_t bytes[16];
   ESP.random(bytes, sizeof(bytes));
-  nonces[nonceIndex] = toHex(bytes, sizeof(bytes));
+  String nonce = toHex(bytes, sizeof(bytes));
+  nonces[nonceIndex] = nonce;
   nonceTimers[nonceIndex] = millis();
-  server.send(200, JSON_CONTENT_TYPE, "{\"nonce\":\"" + nonces[nonceIndex] + "\"}");
   nonceIndex = (nonceIndex + 1) % nonceCount;
+  return nonce;
+}
+
+void handleNonce() {
+  server.send(200, JSON_CONTENT_TYPE, "{\"nonce\":\"" + newNonce() + "\"}");
 }
 
 void handleSecret() {
@@ -99,7 +104,7 @@ void handleSecret() {
     server.send(403, JSON_CONTENT_TYPE, "{\"success\":false}");
     return;
   }
-  DynamicJsonDocument doc(256);
+  StaticJsonDocument<256> doc;
   String secret = deserializeJson(doc, server.arg("plain")) ? "" : doc["secret"] | "";
   if (!isSecret(secret)) {
     server.send(400, JSON_CONTENT_TYPE, "{\"success\":false}");
@@ -119,14 +124,17 @@ void handleRequest() {
     server.send(401, JSON_CONTENT_TYPE, "{\"success\":false}");
     return;
   }
-  DynamicJsonDocument doc(1024);
+  StaticJsonDocument<1024> doc;
   DeserializationError error = deserializeJson(doc, body);
   if (error) {
     server.send(400, JSON_CONTENT_TYPE, "{\"success\":false}");
     return;
   }
+  callback(doc);
+  // Hands back the nonce for the next request, saving the app a separate /nonce round trip.
+  if (signedOnly) doc["nonce"] = newNonce();
   String resp;
-  serializeJson(callback(doc), resp);
+  serializeJson(doc, resp);
   server.send(200, JSON_CONTENT_TYPE, resp);
 }
 

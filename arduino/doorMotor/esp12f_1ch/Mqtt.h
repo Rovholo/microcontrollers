@@ -2,8 +2,8 @@
 #define MQTT_H
 
 #include "Persistance.h"
-#include "Http.h"
 #include <Arduino.h>
+#include <ESP8266WiFi.h>
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 
@@ -16,6 +16,7 @@ private:
   inline static String home;
   inline static String action;
   inline static String reaction;
+  inline static String reactionTopic;
   inline static String pingTopic;
   inline static String stateTopic;
   inline static bool connectedBefore = false;
@@ -27,14 +28,14 @@ private:
   static bool connect(const String& id, const String& username, const String& password);
   static bool isConnected();
 public:
-  typedef DynamicJsonDocument (*CallbackFunction)(DynamicJsonDocument doc);
+  typedef void (*CallbackFunction)(JsonDocument& doc);
   typedef void (*ConnectFunction)(bool firstConnect);
   static void init(CallbackFunction function, ConnectFunction onConnect);
   static void poll();
   static void subscribe(const String& topic);
-  static void send(DynamicJsonDocument doc);
+  static void send(const JsonDocument& doc);
   static void send(const String& payload);
-  static bool sendState(DynamicJsonDocument doc);
+  static bool sendState(const JsonDocument& doc);
   static bool send(const String& topic, const String& payload, bool retained = false);
 };
 

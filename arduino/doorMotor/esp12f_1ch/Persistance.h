@@ -9,9 +9,10 @@
 class Persistance {
 private:
   inline static const String psFileName = "persistance.json";
+  inline static DynamicJsonDocument settings{1024};
+  inline static String token;
   static String read();
   static void write(const String& text);
-  static DynamicJsonDocument getJson();
 public:
   inline static const String WIFI_SSID = "wifiSsid";
   inline static const String WIFI_PASSWORD = "wifiPassword";
@@ -28,6 +29,8 @@ public:
   static void init();
   static void clearJson();
   static String get(const String& key);
+  static void set(const String& key, const String& value);
+  static void save();
   static void persist(const String& key, const String& value);
   static String getToken();
 };
