@@ -12,8 +12,8 @@ const String operate = "operate";
 const String idx = "index";
 const String about = "about";
 const long offlineTime = 4 * 60 * 60 * 1000; // h * min * s * ms
-const long blinkTime = 5 * 1000;
-const long stableTime = 3 * 1000;
+const long blinkTime = 5000; // ms
+const long stableTime = 1500; // ms
 
 unsigned long offlineTimer = millis();
 unsigned long blinkTimer = millis();
