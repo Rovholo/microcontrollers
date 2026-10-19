@@ -13,7 +13,7 @@ const String idx = "index";
 const String about = "about";
 const long offlineTime = 4 * 60 * 60 * 1000; // h * min * s * ms
 const long blinkTime = 5000; // ms
-const long stableTime = 1000; // ms
+const long stableTime = 2000; // ms
 
 unsigned long offlineTimer = millis();
 unsigned long blinkTimer = millis();
