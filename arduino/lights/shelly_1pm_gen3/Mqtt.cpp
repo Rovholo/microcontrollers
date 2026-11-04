@@ -28,11 +28,11 @@ void Mqtt::handleConnection() {
 }
 
 void Mqtt::init(CallbackFunction function) {
-  broker = Persistance::get(Persistance::MQTT_BROKER);
-  username = Persistance::get(Persistance::MQTT_USER);
-  password = Persistance::get(Persistance::MQTT_PASSWORD);
-  deviceId = Persistance::get(Persistance::ID);
-  home = "home/" + Persistance::get(Persistance::HOME_ID);
+  broker = Persistence::get(Persistence::MQTT_BROKER);
+  username = Persistence::get(Persistence::MQTT_USER);
+  password = Persistence::get(Persistence::MQTT_PASSWORD);
+  deviceId = Persistence::get(Persistence::ID);
+  home = "home/" + Persistence::get(Persistence::HOME_ID);
   action = "action";
   reaction = "reaction";
 

@@ -1,16 +1,16 @@
-#include "Persistance.h"
+#include "Persistence.h"
 
-void Persistance::init() {
+void Persistence::init() {
   if (!LittleFS.begin(true)) {
     Serial.println("Failed to mount file system");
   }
   if (read().isEmpty()) {
     clearJson();
   };
-  Serial.println("persistance init");
+  Serial.println("Persistence init");
 }
 
-String Persistance::read(const String& name) {
+String Persistence::read(const String& name) {
   File file = LittleFS.open(name, "r");
   if (!file) {
     if (!LittleFS.exists(name)) {
@@ -24,7 +24,7 @@ String Persistance::read(const String& name) {
   return s;
 }
 
-void Persistance::write(const String& name, const String& text) {
+void Persistence::write(const String& name, const String& text) {
   File file = LittleFS.open(name, "w");
   if (!file) {
     Serial.println("Failed to open file for writing: " + name);
@@ -34,19 +34,19 @@ void Persistance::write(const String& name, const String& text) {
   file.close();
 }
 
-String Persistance::read() {
+String Persistence::read() {
   return read(psFileName);
 }
 
-void Persistance::write(const String& text) {
+void Persistence::write(const String& text) {
   write(psFileName, text);
 }
 
-void Persistance::clearJson() {
+void Persistence::clearJson() {
   write("{}");
 }
 
-DynamicJsonDocument Persistance::getJson() {
+DynamicJsonDocument Persistence::getJson() {
   DynamicJsonDocument doc(1024);
   DeserializationError error = deserializeJson(doc,read());
   if (error) {
@@ -55,11 +55,11 @@ DynamicJsonDocument Persistance::getJson() {
   return doc;
 }
 
-String Persistance::get(const String& key) {
+String Persistence::get(const String& key) {
   return getJson()[key].as<String>();
 }
 
-void Persistance::persist(const String& key, const String& value) {
+void Persistence::persist(const String& key, const String& value) {
   DynamicJsonDocument doc = getJson();
   doc[key] = value;
   String prettyOutput;
@@ -67,7 +67,7 @@ void Persistance::persist(const String& key, const String& value) {
   write(prettyOutput);
 }
 
-String Persistance::getToken() {
+String Persistence::getToken() {
   Serial.print(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
   return base64::encode(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
 }

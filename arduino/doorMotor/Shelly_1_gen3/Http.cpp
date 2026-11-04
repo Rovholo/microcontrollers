@@ -15,7 +15,7 @@ void handleRequest() {
       String authHeader = server.header("Authorization");
       if (authHeader.startsWith("Basic ")) {
         String encoded = authHeader.substring(6);
-        String token = Persistance::getToken();
+        String token = Persistence::getToken();
         if(token == encoded) {
           DynamicJsonDocument doc(1024);
           DeserializationError error = deserializeJson(doc, server.arg("plain"));
@@ -44,7 +44,7 @@ void Http::init(CallbackFunction function) {
   callback = function;
   server.on("/", handleRequest);
   server.begin();
-  MDNS.begin(Persistance::get(Persistance::ID));
+  MDNS.begin(Persistence::get(Persistence::ID));
 }
 
 void Http::poll() {

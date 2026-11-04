@@ -10,7 +10,7 @@ MQTT_BROKER = 'mqttBrokerId'
 MQTT_USER = 'mqttUser'
 MQTT_PASSWORD = 'mqttPassword'
 
-fileName = 'persistance.json'
+fileName = 'Persistence.json'
 
 def read():
     with open(fileName,'r') as f:

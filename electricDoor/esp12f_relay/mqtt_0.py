@@ -3,7 +3,7 @@ import ubinascii
 from control_0 import unique_id, reset
 import ssl
 import json
-import persistance as ps
+import persistence as ps
 import http_0 as http
 
 class Mqtt:

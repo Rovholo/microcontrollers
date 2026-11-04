@@ -3,7 +3,7 @@ try:
 except:
     import socket
 import uselect
-import persistance as ps
+import persistence as ps
 import json
 import ssl
 

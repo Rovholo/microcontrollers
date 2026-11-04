@@ -14,6 +14,9 @@ unsigned long nonceTimers[nonceCount];
 uint8_t nonceIndex = 0;
 const unsigned long secretWindow = 10 * 60 * 1000;
 bool secretWindowClosed = false;
+unsigned long secretWindowStart = 0;
+bool serverStarted = false;
+bool mdnsStarted = false;
 
 String toHex(const uint8_t* bytes, size_t length) {
   const char* digits = "0123456789abcdef";
@@ -71,10 +74,10 @@ bool isAuthorized(const String& body) {
     int split = auth.indexOf(':');
     if (!auth.startsWith("HMAC ") || split < 0) return false;
     String nonce = auth.substring(5, split);
-    String secret = Persistance::get(Persistance::SECRET);
+    String secret = Persistence::get(Persistence::SECRET);
     return isSecret(secret) && useNonce(nonce) && sameText(sign(secret, nonce + body), auth.substring(split + 1));
   }
-  return auth.startsWith("Basic ") && auth.substring(6) == Persistance::getToken();
+  return auth.startsWith("Basic ") && auth.substring(6) == Persistence::getToken();
 }
 
 String newNonce() {
@@ -88,15 +91,23 @@ String newNonce() {
 }
 
 void handleNonce() {
+  if (!signedOnly) {
+    server.send(404, JSON_CONTENT_TYPE, "{\"success\":false}");
+    return;
+  }
   server.send(200, JSON_CONTENT_TYPE, "{\"nonce\":\"" + newNonce() + "\"}");
 }
 
 void handleSecret() {
-  if (!server.hasHeader("Authorization") || server.header("Authorization") != "Basic " + Persistance::getToken()) {
+  if (!signedOnly) {
+    server.send(404, JSON_CONTENT_TYPE, "{\"success\":false}");
+    return;
+  }
+  if (!server.hasHeader("Authorization") || server.header("Authorization") != "Basic " + Persistence::getToken()) {
     server.send(401, JSON_CONTENT_TYPE, "{\"success\":false}");
     return;
   }
-  if (isSecret(Persistance::get(Persistance::SECRET))) {
+  if (isSecret(Persistence::get(Persistence::SECRET))) {
     server.send(409, JSON_CONTENT_TYPE, "{\"success\":false}");
     return;
   }
@@ -110,7 +121,7 @@ void handleSecret() {
     server.send(400, JSON_CONTENT_TYPE, "{\"success\":false}");
     return;
   }
-  Persistance::persist(Persistance::SECRET, secret);
+  Persistence::persist(Persistence::SECRET, secret);
   server.send(200, JSON_CONTENT_TYPE, "{\"success\":true}");
 }
 
@@ -146,17 +157,20 @@ bool Http::isConnected() {
 void Http::init(CallbackFunction function, bool requireSignature) {
   callback = function;
   signedOnly = requireSignature;
-  if (signedOnly) {
+  secretWindowStart = millis();
+  secretWindowClosed = false;
+  if (!serverStarted) {
     server.on("/nonce", HTTP_GET, handleNonce);
     server.on("/secret", HTTP_POST, handleSecret);
+    server.on("/", handleRequest);
+    server.begin();
+    serverStarted = true;
   }
-  server.on("/", handleRequest);
-  server.begin();
-  MDNS.begin(Persistance::get(Persistance::ID));
+  if (signedOnly && !mdnsStarted) mdnsStarted = MDNS.begin(Persistence::get(Persistence::ID));
 }
 
 void Http::poll() {
-  if (!secretWindowClosed && millis() > secretWindow) secretWindowClosed = true;
+  if (!secretWindowClosed && millis() - secretWindowStart > secretWindow) secretWindowClosed = true;
   server.handleClient();
-  MDNS.update();
+  if (mdnsStarted) MDNS.update();
 }

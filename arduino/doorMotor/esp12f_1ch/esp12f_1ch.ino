@@ -1,4 +1,4 @@
-#include "Persistance.h"
+#include "Persistence.h"
 #include "Control.h"
 #include "Mqtt.h"
 #include "Http.h"
@@ -14,6 +14,7 @@ const String about = "about";
 const long offlineTime = 4 * 60 * 60 * 1000; // h * min * s * ms
 const long blinkTime = 5000; // ms
 const long stableTime = 2000; // ms
+const unsigned long handoverTime = 5000; // ms
 
 unsigned long offlineTimer = millis();
 unsigned long blinkTimer = millis();
@@ -27,26 +28,25 @@ unsigned long recentIdTimers[recentIdCount];
 uint8_t recentIdIndex = 0;
 
 void handleCredential(JsonDocument& doc) {
-  String secret = doc[Persistance::SECRET] | "";
-  doc.remove(Persistance::SECRET);
-  Serial.println("handleCredential: ");
-  serializeJson(doc, Serial);
-  if (Lan::connectWifi(doc[Persistance::WIFI_SSID], doc[Persistance::WIFI_PASSWORD])) {
-    Persistance::set(Persistance::WIFI_SSID, doc[Persistance::WIFI_SSID]);
-    Persistance::set(Persistance::WIFI_PASSWORD, doc[Persistance::WIFI_PASSWORD]);
-    Persistance::set(Persistance::NAME, doc[Persistance::NAME]);
-    Persistance::set(Persistance::ID, doc[Persistance::ID]);
-    Persistance::set(Persistance::HOME_ID, doc[Persistance::HOME_ID]);
-    Persistance::set(Persistance::MQTT_BROKER, doc[Persistance::MQTT_BROKER]);
-    Persistance::set(Persistance::MQTT_USER, doc[Persistance::MQTT_USER]);
-    Persistance::set(Persistance::MQTT_PASSWORD, doc[Persistance::MQTT_PASSWORD]);
-    Persistance::set(Persistance::SECRET, secret);
-    Persistance::set(Persistance::ACTIVE, String(true));
-    Persistance::save();
-    doc["success"] = true;
-  } else {
-    doc["success"] = false;
+  String secret = doc[Persistence::SECRET] | "";
+  doc.remove(Persistence::SECRET);
+  Serial.println("handleCredential: " + doc[Persistence::NAME].as<String>() + " on " + doc[Persistence::WIFI_SSID].as<String>());
+  bool connected = Lan::connectWifi(doc[Persistence::WIFI_SSID], doc[Persistence::WIFI_PASSWORD]);
+  if (connected) {
+    Persistence::set(Persistence::WIFI_SSID, doc[Persistence::WIFI_SSID]);
+    Persistence::set(Persistence::WIFI_PASSWORD, doc[Persistence::WIFI_PASSWORD]);
+    Persistence::set(Persistence::NAME, doc[Persistence::NAME]);
+    Persistence::set(Persistence::ID, doc[Persistence::ID]);
+    Persistence::set(Persistence::HOME_ID, doc[Persistence::HOME_ID]);
+    Persistence::set(Persistence::MQTT_BROKER, doc[Persistence::MQTT_BROKER]);
+    Persistence::set(Persistence::MQTT_USER, doc[Persistence::MQTT_USER]);
+    Persistence::set(Persistence::MQTT_PASSWORD, doc[Persistence::MQTT_PASSWORD]);
+    Persistence::set(Persistence::SECRET, secret);
+    Persistence::set(Persistence::ACTIVE, String(true));
+    Persistence::save();
   }
+  doc.clear();
+  doc["success"] = connected;
 }
 
 String readStatus(const uint8_t& i) {
@@ -130,24 +130,38 @@ void onMqttConnect(bool firstConnect) {
   }
 }
 
+// The hotspot shares the radio with the router connection, so it starts on the strongest nearby channel
+// (most likely the home router) to avoid hopping channels and dropping the phone when the device joins.
+void provision() {
+  char hotspotName[16];
+  snprintf(hotspotName, sizeof(hotspotName), "homeQ-%06X", ESP.getChipId());
+  Lan::createHotspot(hotspotName, "abcd1234", Lan::scanChannel());
+  Http::init(handleCredential, false);
+  while (Persistence::get(Persistence::ACTIVE).toInt() == 0) {
+    Http::poll();
+    yield();
+  }
+  // Keeps the hotspot up briefly so the reply reaches the phone before it goes away.
+  unsigned long handoverTimer = millis();
+  while (millis() - handoverTimer < handoverTime) {
+    Http::poll();
+    yield();
+  }
+  Lan::disconnectHotspot();
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println();
-  Persistance::init();
+  Persistence::init();
   Control::init();
-  // Persistance::clearJson();
+  // Persistence::clearJson();
 
-  if (Persistance::get(Persistance::ACTIVE).toInt() == 0) {
-    Lan::createHotspot("homeQ","abcd1234");
-    Http::init(handleCredential, false);
-    while (Persistance::get(Persistance::ACTIVE).toInt() == 0) {
-      Http::poll();
-    }
-    Lan::disconnectHotspot();
-    Control::restart();
+  if (Persistence::get(Persistence::ACTIVE).toInt() == 0) {
+    provision();
+  } else {
+    Lan::connectWifi(Persistence::get(Persistence::WIFI_SSID), Persistence::get(Persistence::WIFI_PASSWORD));
   }
-
-  Lan::connectWifi(Persistance::get(Persistance::WIFI_SSID), Persistance::get(Persistance::WIFI_PASSWORD));
   Http::init(handleRequest, true);
 
   // Set before Mqtt::init, which may connect straight away and call onMqttConnect.

@@ -1,7 +1,7 @@
 #ifndef MQTT_H
 #define MQTT_H
 
-#include "Persistance.h"
+#include "Persistence.h"
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <ArduinoJson.h>

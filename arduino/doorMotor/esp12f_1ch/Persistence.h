@@ -1,14 +1,14 @@
-#ifndef PERSISTANCE_H
-#define PERSISTANCE_H
+#ifndef PERSISTENCE_H
+#define PERSISTENCE_H
 
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <base64.h>
 
-class Persistance {
+class Persistence {
 private:
-  inline static const String psFileName = "persistance.json";
+  inline static const String psFileName = "Persistence.json";
   inline static DynamicJsonDocument settings{1024};
   inline static String token;
   static String read();

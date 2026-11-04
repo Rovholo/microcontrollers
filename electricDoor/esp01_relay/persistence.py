@@ -1,5 +1,4 @@
 import json
-import ubinascii
 
 WIFI_SSID = 'wifiSsid'
 WIFI_PASSWORD = 'wifiPassword'
@@ -11,7 +10,7 @@ MQTT_BROKER = 'mqttBrokerId'
 MQTT_USER = 'mqttUser'
 MQTT_PASSWORD = 'mqttPassword'
 
-fileName = 'persistance.json'
+fileName = 'Persistence.json'
 
 def read():
     with open(fileName,'r') as f:
@@ -51,15 +50,5 @@ def persist(key, value):
     response = get_json()
     response.update({key: value})
     write(json.dumps(response))
-
-def getToken(initial=False):
-    try:
-        name = get(HOME_ID)
-        if not initial:
-            name+='/'+get(ID)
-        return ubinascii.b2a_base64(f'{name}/user:keylock'.encode()).decode().strip()
-    except Exception as e:
-        print('Error:',e)
-        return ''
 
 init()

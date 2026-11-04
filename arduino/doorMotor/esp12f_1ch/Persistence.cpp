@@ -1,6 +1,6 @@
-#include "Persistance.h"
+#include "Persistence.h"
 
-void Persistance::init() {
+void Persistence::init() {
   if (!LittleFS.begin()) {
     Serial.println("Failed to mount file system");
     return;
@@ -10,7 +10,7 @@ void Persistance::init() {
   }
 }
 
-String Persistance::read(const String& name) {
+String Persistence::read(const String& name) {
   File file = LittleFS.open(name, "r");
   if (!file) {
     Serial.println("Failed to open file for reading " + name);
@@ -19,7 +19,7 @@ String Persistance::read(const String& name) {
   return file.readString();  // file is closed automatically when 'file' goes out of scope
 }
 
-void Persistance::write(const String& name, const String& text) {
+void Persistence::write(const String& name, const String& text) {
   File file = LittleFS.open(name, "w");
   if (!file) {
     Serial.println("Failed to open file for writing " + name);
@@ -29,30 +29,30 @@ void Persistance::write(const String& name, const String& text) {
   file.close();
 }
 
-String Persistance::read() {
+String Persistence::read() {
   return read(psFileName);
 }
 
-void Persistance::write(const String& text) {
+void Persistence::write(const String& text) {
   write(psFileName, text);
 }
 
-void Persistance::clearJson() {
+void Persistence::clearJson() {
   settings.clear();
   token = "";
   write("{}");
 }
 
-String Persistance::get(const String& key) {
+String Persistence::get(const String& key) {
   return settings[key].as<String>();
 }
 
-void Persistance::set(const String& key, const String& value) {
+void Persistence::set(const String& key, const String& value) {
   settings[key] = value;
   if (key == ID || key == HOME_ID) token = "";
 }
 
-void Persistance::save() {
+void Persistence::save() {
   String text;
   serializeJsonPretty(settings, text);
   write(text);
@@ -60,12 +60,12 @@ void Persistance::save() {
   deserializeJson(settings, text);
 }
 
-void Persistance::persist(const String& key, const String& value) {
+void Persistence::persist(const String& key, const String& value) {
   set(key, value);
   save();
 }
 
-String Persistance::getToken() {
+String Persistence::getToken() {
   if (token.isEmpty()) token = base64::encode(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
   return token;
 }
