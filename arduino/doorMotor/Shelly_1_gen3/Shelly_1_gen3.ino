@@ -7,84 +7,111 @@
 
 const String action= "action";
 const String status = "status";
+const String mode = "mode";
 const String operate = "operate";
-const String on = "on";
 const String idx = "index";
 const String about = "about";
-const long offlineTime = 4 * 60 * 60 * 1000; // h * min * s * ms
-const long statusTime = 5 * 1000;
+const long offlineTime = 4 * 60 * 60 * 1000;
+const long blinkTime = 5000;
+const long stableTime = 2000;
+const unsigned long handoverTime = 5000;
 
 unsigned long offlineTimer = millis();
-unsigned long statusTimer = millis();
+unsigned long blinkTimer = millis();
 String* prevStatuses;
+String* readings;
+unsigned long* readingTimers;
+const uint8_t recentIdCount = 8;
+const unsigned long repeatTime = 10 * 1000;
+String recentIds[recentIdCount];
+unsigned long recentIdTimers[recentIdCount];
+uint8_t recentIdIndex = 0;
 
-DynamicJsonDocument handleCredential(DynamicJsonDocument doc) {
-  Serial.print("handleCredential: ");
-  serializeJson(doc, Serial);
-  Serial.println("");
-  if (Lan::connectWifi(doc[Persistence::WIFI_SSID], doc[Persistence::WIFI_PASSWORD])) {
-    Persistence::persist(Persistence::WIFI_SSID, doc[Persistence::WIFI_SSID]);
-    Persistence::persist(Persistence::WIFI_PASSWORD, doc[Persistence::WIFI_PASSWORD]);
-    Persistence::persist(Persistence::NAME, doc[Persistence::NAME]);
-    Persistence::persist(Persistence::ID, doc[Persistence::ID]);
-    Persistence::persist(Persistence::HOME_ID, doc[Persistence::HOME_ID]);
-    Persistence::persist(Persistence::MQTT_BROKER, doc[Persistence::MQTT_BROKER]);
-    Persistence::persist(Persistence::MQTT_USER, doc[Persistence::MQTT_USER]);
-    Persistence::persist(Persistence::MQTT_PASSWORD, doc[Persistence::MQTT_PASSWORD]);
-    Persistence::persist(Persistence::ACTIVE, String(true));
-    doc["success"] = true;
-  } else {
-    doc["success"] = false;
+void handleCredential(JsonDocument& doc) {
+  String secret = doc[Persistence::SECRET] | "";
+  doc.remove(Persistence::SECRET);
+  Serial.println("handleCredential: " + doc[Persistence::NAME].as<String>() + " on " + doc[Persistence::WIFI_SSID].as<String>());
+  bool connected = Lan::connectWifi(doc[Persistence::WIFI_SSID], doc[Persistence::WIFI_PASSWORD]);
+  if (connected) {
+    Persistence::set(Persistence::WIFI_SSID, doc[Persistence::WIFI_SSID]);
+    Persistence::set(Persistence::WIFI_PASSWORD, doc[Persistence::WIFI_PASSWORD]);
+    Persistence::set(Persistence::NAME, doc[Persistence::NAME]);
+    Persistence::set(Persistence::ID, doc[Persistence::ID]);
+    Persistence::set(Persistence::HOME_ID, doc[Persistence::HOME_ID]);
+    Persistence::set(Persistence::MQTT_BROKER, doc[Persistence::MQTT_BROKER]);
+    Persistence::set(Persistence::MQTT_USER, doc[Persistence::MQTT_USER]);
+    Persistence::set(Persistence::MQTT_PASSWORD, doc[Persistence::MQTT_PASSWORD]);
+    Persistence::set(Persistence::SECRET, secret);
+    Persistence::set(Persistence::ACTIVE, String(true));
+    Persistence::save();
   }
-  return doc;
+  doc.clear();
+  doc["success"] = connected;
 }
 
-DynamicJsonDocument startDoor(const uint8_t& i) {
-  Control::relayPulse(i);
-  return getStatus(i);
+String readStatus(const uint8_t& i) {
+  return Control::isClosed(i) ? "closed" : "open";
 }
 
-DynamicJsonDocument getStatus(const uint8_t& i) {
-  DynamicJsonDocument doc(1024);
+void writeStatus(JsonDocument& doc, const uint8_t& i) {
   doc[idx] = i;
-  doc[status] = Control::isClosed(i) ? "closed" : "open";
-  return doc;
+  doc[status] = readStatus(i);
 }
 
-DynamicJsonDocument handleRequest(DynamicJsonDocument doc) {
+bool isRepeat(const String& id) {
+  if (id.isEmpty()) return false;
+  for (uint8_t i = 0; i < recentIdCount; i++) {
+    if (recentIds[i] == id && millis() - recentIdTimers[i] < repeatTime) return true;
+  }
+  recentIds[recentIdIndex] = id;
+  recentIdTimers[recentIdIndex] = millis();
+  recentIdIndex = (recentIdIndex + 1) % recentIdCount;
+  return false;
+}
+
+void handleRequest(JsonDocument& doc) {
   Serial.print("handleRequest: ");
   serializeJson(doc, Serial);
   Serial.println("");
-  DynamicJsonDocument resp(1024);
+  uint8_t i = doc[idx].as<uint8_t>();
+  if (i >= Control::relayCount()) {
+    doc["success"] = false;
+    return;
+  }
+  if (doc[action] == operate) {
+    String id = doc["id"] | "";
+    if (!isRepeat(id)) Control::relayPulse(i);
+  } else if (doc[action] != status) {
+    doc["success"] = false;
+    return;
+  }
+  writeStatus(doc, i);
   doc["success"] = true;
-  if (doc[action] == status) {
-    resp = getStatus(doc[idx].as<uint8_t>());
-  } else if (doc[action] == operate || doc[action] == on) {
-    resp = startDoor(doc[idx].as<uint8_t>());
-  } else {
-    resp["success"] = false;
-  }
+}
 
-  for (JsonPair kv : resp.as<JsonObject>()) {
-    doc[kv.key()] = kv.value();
+void handleStatusChanges() {
+  for (uint8_t i = 0; i < Control::relayCount(); i++) {
+    String reading = readStatus(i);
+    if (reading != readings[i]) {
+      readings[i] = reading;
+      readingTimers[i] = millis();
+    } else if (reading != prevStatuses[i] && millis() - readingTimers[i] >= stableTime) {
+      StaticJsonDocument<256> doc;
+      doc[idx] = i;
+      doc[status] = reading;
+      doc["prevStatus"] = prevStatuses[i];
+      if (Mqtt::sendState(doc)) {
+        prevStatuses[i] = reading;
+      }
+    }
   }
-  return doc;
 }
 
 void handleRecovery() {
   Control::chechButton();
-  if (millis() - statusTimer >= statusTime) {
-    statusTimer = millis();
+  if (millis() - blinkTimer >= blinkTime) {
+    blinkTimer = millis();
     Control::ledBlink();
-    for (uint8_t i = 0; i < Control::relayCount(); i++) {
-      DynamicJsonDocument resp = getStatus(i);
-      if (prevStatuses[i] != resp[status]) {
-        resp[Persistence::NAME] = Persistence::get(Persistence::NAME);
-        resp["old"] = prevStatuses[i];
-        prevStatuses[i] = resp[status].as<String>();
-        Mqtt::send(resp);
-      }
-    }
   }
   if (millis() - offlineTimer >= offlineTime) {
     offlineTimer = millis();
@@ -92,6 +119,39 @@ void handleRecovery() {
       Control::restart();
     }
   }
+}
+
+void onMqttConnect(bool firstConnect) {
+  for (uint8_t i = 0; i < Control::relayCount(); i++) {
+    StaticJsonDocument<256> doc;
+    writeStatus(doc, i);
+    if (firstConnect) prevStatuses[i] = doc[status].as<String>();
+    doc[mode] = "connect";
+    Mqtt::sendState(doc);
+  }
+}
+
+String hotspotName() {
+  uint64_t mac = ESP.getEfuseMac();
+  char name[16];
+  snprintf(name, sizeof(name), "homeQ-%06X", (uint32_t)((mac >> 24) & 0xFFFFFF));
+  return String(name);
+}
+
+void provision() {
+  Lan::createHotspot(hotspotName(), "abcd1234", Lan::scanChannel());
+  Http::init(handleCredential, false);
+  while (Persistence::get(Persistence::ACTIVE).toInt() == 0) {
+    Http::poll();
+    Control::chechButton();
+    delay(1);
+  }
+  unsigned long handoverTimer = millis();
+  while (millis() - handoverTimer < handoverTime) {
+    Http::poll();
+    delay(1);
+  }
+  Lan::disconnectHotspot();
 }
 
 void setup() {
@@ -102,30 +162,27 @@ void setup() {
   Control::init();
 
   if (Persistence::get(Persistence::ACTIVE).toInt() == 0) {
-    Lan::createHotspot("homeQ","abcd1234");
-    Http::init(handleCredential);
-    while (Persistence::get(Persistence::ACTIVE).toInt() == 0) {
-      Http::poll();
-    }
-    Lan::disconnectHotspot();
-    Control::restart();
+    provision();
+  } else {
+    Lan::connectWifi(Persistence::get(Persistence::WIFI_SSID), Persistence::get(Persistence::WIFI_PASSWORD));
   }
-
-  Lan::connectWifi(Persistence::get(Persistence::WIFI_SSID), Persistence::get(Persistence::WIFI_PASSWORD));
-  Http::init(handleRequest);
-  Mqtt::init(handleRequest);
+  Http::init(handleRequest, true);
 
   prevStatuses = new String[Control::relayCount()];
+  readings = new String[Control::relayCount()];
+  readingTimers = new unsigned long[Control::relayCount()];
   for (uint8_t i = 0; i < Control::relayCount(); i++) {
-    DynamicJsonDocument doc = getStatus(i);
-    prevStatuses[i] = doc[status].as<String>();
-    Mqtt::send(doc);
+    prevStatuses[i] = readStatus(i);
+    readings[i] = prevStatuses[i];
+    readingTimers[i] = millis();
   }
+  Mqtt::init(handleRequest, onMqttConnect);
   Serial.println("init done");
 }
 
 void loop() {
   Http::poll();
   Mqtt::poll();
+  handleStatusChanges();
   handleRecovery();
 }

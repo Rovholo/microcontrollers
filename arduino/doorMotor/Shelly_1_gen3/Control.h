@@ -14,7 +14,7 @@ public:
   static void ledBlink();
   static void relayOn(const uint8_t& i);
   static void relayOff(const uint8_t& i);
-  static void relayPulse(const uint8_t& i);
+  static bool relayPulse(const uint8_t& i);
   static uint8_t relayCount();
   static bool isClosed(const uint8_t& i);
   static void restart();

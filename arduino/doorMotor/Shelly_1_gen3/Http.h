@@ -2,16 +2,16 @@
 #define HTTP_H
 
 #include "Persistence.h"
-#include "Lan.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
 
 class Http {
 public:
-  typedef DynamicJsonDocument (*CallbackFunction)(DynamicJsonDocument doc);
-  static void init(CallbackFunction function);
+  typedef void (*CallbackFunction)(JsonDocument& doc);
+  static void init(CallbackFunction function, bool requireSignature);
   static void poll();
   static bool isConnected();
 };

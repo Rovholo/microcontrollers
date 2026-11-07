@@ -3,23 +3,21 @@
 void Persistence::init() {
   if (!LittleFS.begin(true)) {
     Serial.println("Failed to mount file system");
+    return;
   }
-  if (read().isEmpty()) {
+  if (deserializeJson(settings, read())) {
     clearJson();
-  };
+  }
   Serial.println("Persistence init");
 }
 
 String Persistence::read(const String& name) {
   File file = LittleFS.open(name, "r");
   if (!file) {
-    if (!LittleFS.exists(name)) {
-        Serial.println("Error: File does not actually exist");
-    }
     Serial.println("Failed to open file for reading: " + name);
     return "";
   }
-  String s = file.readString();  // file is closed automatically when 'file' goes out of scope
+  String s = file.readString();
   file.close();
   return s;
 }
@@ -43,31 +41,33 @@ void Persistence::write(const String& text) {
 }
 
 void Persistence::clearJson() {
+  settings.clear();
+  token = "";
   write("{}");
 }
 
-DynamicJsonDocument Persistence::getJson() {
-  DynamicJsonDocument doc(1024);
-  DeserializationError error = deserializeJson(doc,read());
-  if (error) {
-    doc.clear();
-  }
-  return doc;
+String Persistence::get(const String& key) {
+  return settings[key].as<String>();
 }
 
-String Persistence::get(const String& key) {
-  return getJson()[key].as<String>();
+void Persistence::set(const String& key, const String& value) {
+  settings[key] = value;
+  if (key == ID || key == HOME_ID) token = "";
+}
+
+void Persistence::save() {
+  String text;
+  serializeJsonPretty(settings, text);
+  write(text);
+  deserializeJson(settings, text);
 }
 
 void Persistence::persist(const String& key, const String& value) {
-  DynamicJsonDocument doc = getJson();
-  doc[key] = value;
-  String prettyOutput;
-  serializeJsonPretty(doc, prettyOutput);
-  write(prettyOutput);
+  set(key, value);
+  save();
 }
 
 String Persistence::getToken() {
-  Serial.print(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
-  return base64::encode(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
+  if (token.isEmpty()) token = base64::encode(get(HOME_ID) + "/" + get(ID) + "/user:keylock");
+  return token;
 }
