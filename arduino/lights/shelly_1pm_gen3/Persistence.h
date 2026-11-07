@@ -9,6 +9,9 @@
 class Persistence {
 private:
   inline static const String psFileName = "/Persistence.json";
+  static const uint8_t mountAttempts = 3;
+  static const uint32_t retryDelay = 1000;
+  static const uint32_t restartDelay = 5000;
   static String read();
   static void write(const String& text);
   static DynamicJsonDocument getJson();

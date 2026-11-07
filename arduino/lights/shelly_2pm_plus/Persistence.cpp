@@ -1,8 +1,15 @@
 #include "Persistence.h"
 
 void Persistence::init() {
-  if (!LittleFS.begin(true)) {
+  uint8_t attempts = 0;
+  while (!LittleFS.begin(true)) {
     Serial.println("Failed to mount file system");
+    if (++attempts >= mountAttempts) {
+      Serial.println("restarting...");
+      delay(restartDelay);
+      ESP.restart();
+    }
+    delay(retryDelay);
   }
   if (read().isEmpty()) {
     clearJson();

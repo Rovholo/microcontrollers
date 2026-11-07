@@ -62,7 +62,7 @@ void Control::restart() {
 }
 
 void Control::chechButton() {
-    if (digitalRead(button) == HIGH) {
+    if (digitalRead(button) == LOW) {
         Serial.println("reset button clicked...");
         restart();
     }
