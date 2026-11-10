@@ -4,6 +4,7 @@
 #include "Mqtt.h"
 #include "Http.h"
 #include "Lan.h"
+#include "BleSetup.h"
 #include <ArduinoJson.h>
 #include <time.h>
 
@@ -364,16 +365,20 @@ void provision() {
   Http::setAbout(aboutJson);
   Lan::createHotspot(hotspotName(), "abcd1234", Lan::scanChannel());
   Http::init(handleCredential, false);
+  BleSetup::begin(hotspotName(), aboutJson, handleCredential);
   while (Persistence::get(Persistence::ACTIVE).toInt() == 0) {
     Http::poll();
+    BleSetup::poll();
     handleButton();
     delay(1);
   }
   unsigned long handoverTimer = millis();
   while (millis() - handoverTimer < handoverTime) {
     Http::poll();
+    BleSetup::poll();
     delay(1);
   }
+  BleSetup::end();
   Lan::disconnectHotspot();
 }
 }
