@@ -60,3 +60,11 @@ void Lan::disconnectHotspot() {
   WiFi.softAPdisconnect(true);
   WiFi.scanDelete();
 }
+
+void Lan::stationOnly() {
+  if (WiFi.getMode() & WIFI_AP) {
+    Serial.println("Turning off a leftover hotspot");
+    WiFi.softAPdisconnect(true);
+  }
+  WiFi.mode(WIFI_STA);
+}

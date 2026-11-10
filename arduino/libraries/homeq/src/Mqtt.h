@@ -48,6 +48,7 @@ public:
   static bool sendState(const JsonDocument& doc, uint8_t channel);
   static bool send(const String& topic, const String& payload, bool retained = false);
   static bool isRetired();
+  static bool announceReset(unsigned long waitTime);
 };
 
 #endif

@@ -14,6 +14,7 @@ public:
   static uint8_t scanChannel();
   static void createHotspot(const String& ssid, const String& password, uint8_t channel);
   static void disconnectHotspot();
+  static void stationOnly();
 };
 
 #endif

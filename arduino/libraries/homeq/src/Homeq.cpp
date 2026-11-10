@@ -5,6 +5,7 @@
 #include "Http.h"
 #include "Lan.h"
 #include <ArduinoJson.h>
+#include <time.h>
 
 namespace {
 const String action = "action";
@@ -27,6 +28,13 @@ const unsigned long switchStableTime = 50;
 const unsigned long handoverTime = 5000;
 const uint8_t recentIdCount = 8;
 const unsigned long repeatTime = 10 * 1000;
+const unsigned long remoteCauseTime = 60 * 1000;
+const unsigned long resetAnnounceTime = 5000;
+const time_t validTime = 1700000000;
+const String causeKey = "cause";
+const String timeKey = "ts";
+const String remoteCause = "remote";
+const String inputCause = "input";
 
 const Board* board = nullptr;
 String boardId;
@@ -40,6 +48,9 @@ unsigned long blinkTimer = 0;
 String* prevStatuses;
 String* readings;
 unsigned long* readingTimers;
+String* causes;
+unsigned long* remoteTimers;
+time_t* changeTimes;
 bool* switchStates;
 bool* switchReadings;
 unsigned long* switchTimers;
@@ -174,6 +185,21 @@ String readStatus(const uint8_t& i) {
   return Control::isInputActive(i) ? closedStatus : openStatus;
 }
 
+time_t clockTime() {
+  time_t now = time(nullptr);
+  return now >= validTime ? now : 0;
+}
+
+void markRemote(const uint8_t& i) {
+  causes[i] = remoteCause;
+  remoteTimers[i] = millis();
+}
+
+String changeCause(const uint8_t& i) {
+  if (channelTypes[i] == DeviceType::LIGHT) return causes[i];
+  return causes[i] == remoteCause && millis() - remoteTimers[i] < remoteCauseTime ? remoteCause : inputCause;
+}
+
 bool isRepeat(const String& id) {
   if (id.isEmpty()) return false;
   for (uint8_t i = 0; i < recentIdCount; i++) {
@@ -196,8 +222,9 @@ void runRequest(JsonDocument& doc, int16_t i) {
     DeviceType type = channelTypes[i];
     if (requested == status) {
     } else if (type == DeviceType::GARAGE_DOOR && requested == operate) {
-      if (!isRepeat(msgId)) Control::relayPulse(i);
+      if (!isRepeat(msgId) && Control::relayPulse(i)) markRemote(i);
     } else if (type == DeviceType::LIGHT && (requested == on || requested == off)) {
+      if (Control::isRelayOn(i) != (requested == on)) markRemote(i);
       Control::relaySet(i, requested == on);
     } else {
       success = false;
@@ -235,6 +262,7 @@ void handleSwitches() {
       switchTimers[i] = millis();
     } else if (reading != switchStates[i] && millis() - switchTimers[i] >= switchStableTime) {
       switchStates[i] = reading;
+      causes[i] = inputCause;
       Control::relaySet(i, !Control::isRelayOn(i));
     }
   }
@@ -247,10 +275,13 @@ void handleStatusChanges() {
     if (reading != readings[i]) {
       readings[i] = reading;
       readingTimers[i] = millis();
+      changeTimes[i] = clockTime();
     } else if (reading != prevStatuses[i] && millis() - readingTimers[i] >= stableTime) {
       StaticJsonDocument<256> doc;
       doc[status] = reading;
       doc["prevStatus"] = prevStatuses[i];
+      doc[causeKey] = changeCause(i);
+      if (changeTimes[i] > 0) doc[timeKey] = (unsigned long)changeTimes[i];
       if (Mqtt::sendState(doc, i)) {
         prevStatuses[i] = reading;
       }
@@ -266,6 +297,9 @@ void handleButton() {
       break;
     case ButtonEvent::HOLD:
       Serial.println("reset button held, clearing settings");
+      if (Persistence::get(Persistence::ACTIVE).toInt() != 0 && Mqtt::announceReset(resetAnnounceTime)) {
+        Serial.println("told HomeQ this device was reset");
+      }
       Persistence::clearJson();
       Control::restart();
       break;
@@ -295,6 +329,8 @@ void onMqttConnect(bool firstConnect) {
     doc[status] = readStatus(i);
     if (firstConnect) prevStatuses[i] = doc[status].as<String>();
     doc[mode] = "connect";
+    time_t now = clockTime();
+    if (now > 0) doc[timeKey] = (unsigned long)now;
     Mqtt::sendState(doc, i);
   }
 }
@@ -354,7 +390,9 @@ void Homeq::begin(const Board& b) {
 
   if (Persistence::get(Persistence::ACTIVE).toInt() == 0) {
     provision();
+    Lan::stationOnly();
   } else {
+    Lan::stationOnly();
     Lan::connectWifi(Persistence::get(Persistence::WIFI_SSID), Persistence::get(Persistence::WIFI_PASSWORD));
   }
   loadChannels();
@@ -366,6 +404,9 @@ void Homeq::begin(const Board& b) {
   prevStatuses = new String[channelCount];
   readings = new String[channelCount];
   readingTimers = new unsigned long[channelCount];
+  causes = new String[channelCount];
+  remoteTimers = new unsigned long[channelCount];
+  changeTimes = new time_t[channelCount];
   switchStates = new bool[channelCount];
   switchReadings = new bool[channelCount];
   switchTimers = new unsigned long[channelCount];
@@ -373,6 +414,9 @@ void Homeq::begin(const Board& b) {
     prevStatuses[i] = readStatus(i);
     readings[i] = prevStatuses[i];
     readingTimers[i] = millis();
+    causes[i] = inputCause;
+    remoteTimers[i] = 0;
+    changeTimes[i] = 0;
     switchStates[i] = Control::isInputActive(i);
     switchReadings[i] = switchStates[i];
     switchTimers[i] = millis();

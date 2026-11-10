@@ -135,6 +135,33 @@ bool Mqtt::isRetired() {
   return retired;
 }
 
+bool Mqtt::announceReset(unsigned long waitTime) {
+  if (retired || broker.isEmpty()) return false;
+  unsigned long start = millis();
+  while (!isConnected() && millis() - start < waitTime) {
+    handleConnection();
+    delay(10);
+  }
+  while (isConnected() && ownerPending && !retired && millis() - ownerTimer < ownerWait) {
+    client.loop();
+    delay(10);
+  }
+  if (retired || !isConnected()) return false;
+  time_t now = time(nullptr);
+  bool sent = true;
+  for (uint8_t i = 0; i < channelCount; i++) {
+    StaticJsonDocument<128> doc;
+    doc["status"] = "offline";
+    doc["mode"] = "reset";
+    if (now >= validTime) doc["ts"] = (unsigned long)now;
+    sent = sendState(doc, i) && sent;
+  }
+  client.loop();
+  client.disconnect();
+  delay(250);
+  return sent;
+}
+
 void Mqtt::poll() {
   handleConnection();
   if (!isConnected()) return;
